@@ -63,7 +63,7 @@ function setAuthCookies(
   res.cookie("access_token", accessToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "lax",
+    sameSite: isProduction ? "none" : "lax",
     maxAge: 15 * 60 * 1000,
     path: "/",
   });
@@ -71,7 +71,7 @@ function setAuthCookies(
   res.cookie("refresh_token", refreshToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "lax",
+    sameSite: isProduction ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/api/auth",
   });
@@ -349,14 +349,14 @@ export async function logout(req: Request, res: Response) {
 
     res.clearCookie("access_token", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
     });
 
     res.clearCookie("refresh_token", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/api/auth",
     });

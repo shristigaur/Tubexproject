@@ -42,15 +42,16 @@ export function GoogleAuthButton() {
   useEffect(() => {
     // We attach it to window so the script can call it
     (window as any).onGoogleLibraryLoad = () => {
-      if (!isGoogleInitialized && window.google) {
-        window.google.accounts.id.initialize({
+      const win = window as any;
+      if (!isGoogleInitialized && win.google) {
+        win.google.accounts.id.initialize({
           client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "",
           callback: handleSuccess,
         });
         isGoogleInitialized = true;
       }
-      if (containerRef.current && window.google) {
-        window.google.accounts.id.renderButton(containerRef.current, {
+      if (containerRef.current && win.google) {
+        win.google.accounts.id.renderButton(containerRef.current, {
           theme: "outline",
           size: "large",
           width: 320,
@@ -60,7 +61,7 @@ export function GoogleAuthButton() {
     };
 
     // If script is already loaded
-    if (window.google?.accounts?.id) {
+    if ((window as any).google?.accounts?.id) {
       (window as any).onGoogleLibraryLoad();
     }
   }, []);
