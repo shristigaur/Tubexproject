@@ -5,7 +5,7 @@ import { ArrowRight, BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-const API=process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api";
+
 type Channel={id:string;title:string;category:string;country:string;subscribers:number;monthlyViews:number;askingPrice:number;growthPercent:number|null;verified:boolean};
 const fallback:Channel[]=[
 {id:"1",title:"Finance Simplified",category:"Finance",country:"United States",subscribers:186000,monthlyViews:1200000,askingPrice:12900,growthPercent:18,verified:true},

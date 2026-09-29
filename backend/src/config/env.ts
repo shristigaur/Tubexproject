@@ -6,9 +6,7 @@ const schema = z.object({
  PORT:z.coerce.number().int().positive().default(5000),
  FRONTEND_URL:z.string().url(),
  DATABASE_URL:z.string().min(1),
-  FIREBASE_PROJECT_ID: z.string().min(1),
-  FIREBASE_CLIENT_EMAIL: z.string().email(),
-  FIREBASE_PRIVATE_KEY: z.string().min(1),
+
 }).refine(data => {
   return true;
 }, { message: "Configuration validation failed" });

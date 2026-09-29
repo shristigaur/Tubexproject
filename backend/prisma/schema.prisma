@@ -47,7 +47,6 @@ model User {
   inquiries       Inquiry[] @relation("BuyerInquiries")
   sessions        Session[]
   verification    VerificationProfile?
-  verificationCodes VerificationCode[]
 }
 
 model VerificationProfile {
@@ -143,22 +142,3 @@ model NewsletterSubscriber {
   createdAt DateTime @default(now())
 }
 
-enum VerificationType {
-  EMAIL_VERIFICATION
-  PASSWORD_RESET
-}
-
-model VerificationCode {
-  id        String           @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String           @db.ObjectId
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      VerificationType
-  codeHash  String
-  expiresAt DateTime
-  attempts  Int              @default(0)
-  usedAt    DateTime?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-
-  @@index([userId, type])
-}

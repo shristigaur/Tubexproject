@@ -7,8 +7,6 @@ import { Eye, EyeOff, Check, X } from "lucide-react";
 
 import { api } from "@/lib/api";
 import { GoogleAuthButton } from "./google-auth-button";
-import { auth } from "@/lib/firebase";
-import { sendSignInLinkToEmail } from "firebase/auth";
 
 export function SignupForm() {
   const router = useRouter();
@@ -96,22 +94,10 @@ export function SignupForm() {
         }),
       });
 
-      // Send Firebase Email Link
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-      const actionCodeSettings = {
-        url: `${appUrl}/verify-email`,
-        handleCodeInApp: true,
-      };
-
-      await sendSignInLinkToEmail(auth, email.trim().toLowerCase(), actionCodeSettings);
-
-      // Save email locally for Firebase to verify
-      window.localStorage.setItem("emailForSignIn", email.trim().toLowerCase());
-
-      setSuccess("Account created! Redirecting to email verification...");
+      setSuccess("Account created! You can now login.");
 
       setTimeout(() => {
-        router.push(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}&sent=true`);
+        router.push("/login");
       }, 1000);
     } catch (error) {
       if (error instanceof Error) {

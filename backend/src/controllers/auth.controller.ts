@@ -11,7 +11,6 @@ import {
   hashPassword,
   hashToken,
 } from "../lib/auth.js";
-import { firebaseAuth } from "../config/firebase-admin.js";
 
 // ==========================================
 // GOOGLE CLIENT
@@ -45,9 +44,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-const firebaseLoginSchema = z.object({
-  idToken: z.string().min(1),
-});
+
 
 // ==========================================
 // COOKIE HELPER
@@ -146,66 +143,6 @@ export async function signup(req: Request, res: Response) {
 }
 
 // ==========================================
-// FIREBASE LOGIN (MAGIC LINK)
-// ==========================================
-
-export async function firebaseLogin(req: Request, res: Response) {
-  try {
-    const result = firebaseLoginSchema.safeParse(req.body);
-    if (!result.success) {
-      return res.status(400).json({ message: "Invalid token data" });
-    }
-
-    const { idToken } = result.data;
-
-    // Verify Firebase ID token using Admin SDK
-    const decodedToken = await firebaseAuth.verifyIdToken(idToken);
-    
-    if (!decodedToken.email) {
-      return res.status(400).json({ message: "No email associated with this token" });
-    }
-    
-    const email = decodedToken.email.toLowerCase();
-
-    // Find user in TubeX DB
-    let user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user) {
-      // Create user if they don't exist (e.g. they only signed up via magic link directly)
-      user = await prisma.user.create({
-        data: {
-          name: decodedToken.name || "TubeX User",
-          email,
-          emailVerified: true,
-          role: "USER",
-        },
-      });
-    } else if (!user.emailVerified) {
-      // Mark as verified
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { emailVerified: true },
-      });
-    }
-
-    // Issue TubeX JWTs
-    const accessToken = createAccessToken(user.id);
-    const refreshToken = await createSession(user.id, req);
-
-    setAuthCookies(res, accessToken, refreshToken);
-
-    return res.status(200).json({
-      success: true,
-      message: "Authentication successful!",
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    });
-  } catch (error) {
-    console.error("Firebase login error:", error);
-    return res.status(401).json({ message: "Invalid or expired authentication token." });
-  }
-}
-
-// ==========================================
 // LOGIN
 // ==========================================
 
@@ -234,9 +171,7 @@ export async function login(req: Request, res: Response) {
         .json({ message: "Invalid email or password." });
     }
 
-    if (!user.emailVerified) {
-      return res.status(403).json({ message: "Please verify your email first.", unverified: true });
-    }
+
 
     const accessToken = createAccessToken(user.id);
     const refreshToken = await createSession(user.id, req);
@@ -297,7 +232,6 @@ export async function googleAuth(req: Request, res: Response) {
           name: payload.name || "TubeX User",
           email,
           googleId: payload.sub,
-          emailVerified: false, // Explicitly false so they do OTP
           role: "USER", // Default role
         },
       });
@@ -315,9 +249,7 @@ export async function googleAuth(req: Request, res: Response) {
       }
     }
 
-    if (!user.emailVerified) {
-      return res.status(403).json({ message: "Please verify your email first.", unverified: true });
-    }
+
 
     const accessToken = createAccessToken(user.id);
     const refreshToken = await createSession(user.id, req);
@@ -402,21 +334,4 @@ export async function getMe(req: Request, res: Response) {
     console.error("Get me error:", error);
     return res.status(500).json({ message: "Failed to load user profile." });
   }
-}
-
-// ==========================================
-// FORGOT / RESET PASSWORD
-// ==========================================
-
-export async function forgotPassword(req: Request, res: Response) {
-  // Not implemented for Firebase replacement yet
-  res.status(501).json({ message: "Not Implemented" });
-}
-
-export async function verifyResetOTP(req: Request, res: Response) {
-  res.status(501).json({ message: "Not Implemented" });
-}
-
-export async function resetPassword(req: Request, res: Response) {
-  res.status(501).json({ message: "Not Implemented" });
 }

@@ -21,20 +21,7 @@ export function GoogleAuthButton() {
       });
       router.push(data.user?.role === "SELLER" ? "/seller-dashboard" : "/explore-channels");
     } catch (err: any) {
-      if (err.message === "Please verify your email first.") {
-        try {
-          const payload = JSON.parse(atob(response.credential.split('.')[1]));
-          const email = payload.email;
-          setError("Please verify your email first. Redirecting...");
-          setTimeout(() => {
-            router.push(`/verify-email?email=${encodeURIComponent(email)}`);
-          }, 1500);
-          return;
-        } catch (e) {
-          router.push("/verify-email");
-          return;
-        }
-      }
+
       setError(err.message || "Google authentication failed.");
     }
   };

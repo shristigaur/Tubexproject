@@ -63,13 +63,7 @@ export function LoginForm() {
         router.push(data.user?.role === "SELLER" ? "/seller-dashboard" : "/explore-channels");
       }, 700);
     } catch (error: any) {
-      if (error.message === "Please verify your email first.") {
-         setError("Please verify your email first. Redirecting...");
-         setTimeout(() => {
-           router.push(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
-         }, 1500);
-         return;
-      }
+
 
       setError(
         error instanceof Error
