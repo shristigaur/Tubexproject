@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum ChannelStatus {
+  DRAFT
+  PUBLISHED
+  SOLD
+  SUSPENDED
+}
+
+enum VerificationStatus {
+  NOT_STARTED
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+model User {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+
+  name            String
+  email           String    @unique
+
+  passwordHash    String?
+  googleId        String?
+  emailVerified   Boolean   @default(false)
+
+  role            Role      @default(USER)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  channels        Channel[]
+  inquiries       Inquiry[] @relation("BuyerInquiries")
+  sessions        Session[]
+  verification    VerificationProfile?
+  verificationCodes VerificationCode[]
+}
+
+model VerificationProfile {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String    @unique @db.ObjectId
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status          VerificationStatus @default(NOT_STARTED)
+  
+  documentType    String?
+  documentUrl     String?
+  
+  country         String?
+  phone           String?
+  
+  // Seller specific
+  youtubeChannelUrl String?
+  businessName      String?
+  
+  submittedAt     DateTime?
+  verifiedAt      DateTime?
+  rejectionReason String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Channel {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  title           String
+  slug            String        @unique
+  category        String
+  country         String
+  subscribers     Int
+  monthlyViews    Int
+  monthlyRevenue  Float?
+  askingPrice     Float
+  growthPercent   Float?
+  description     String
+  verified        Boolean       @default(false)
+  status          ChannelStatus @default(DRAFT)
+
+  sellerId        String        @db.ObjectId
+  seller          User          @relation(fields: [sellerId], references: [id])
+
+  inquiries       Inquiry[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status, category])
+  @@index([askingPrice])
+  @@index([country])
+}
+
+model Inquiry {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  message   String
+
+  buyerId   String   @db.ObjectId
+  buyer     User     @relation("BuyerInquiries", fields: [buyerId], references: [id])
+
+  channelId String   @db.ObjectId
+  channel   Channel  @relation(fields: [channelId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([channelId, createdAt])
+}
+
+model Session {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash   String
+
+  expiresAt   DateTime
+
+  userAgent   String?
+  ipAddress   String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+enum VerificationType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model VerificationCode {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      VerificationType
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int              @default(0)
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId, type])
+}
