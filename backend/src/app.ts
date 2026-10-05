@@ -10,8 +10,6 @@ import authRoutes from "./routes/auth.routes.js";
 import { env } from "./config/env.js";
 import { notFound, errorHandler } from "./middleware/error.js";
 
-
-
 export const app = express();
 app.disable("x-powered-by");
 app.use(helmet());
@@ -21,6 +19,12 @@ app.use(express.urlencoded({ extended: false, limit: "20kb" }));
 app.use(cookieParser());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: "draft-7", legacyHeaders: false }));
 
+app.get("/", (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "TubeX API is running",
+  });
+});
 
 app.get("/api/health", (_req, res) => {
   res.status(200).json({
@@ -29,10 +33,7 @@ app.get("/api/health", (_req, res) => {
   });
 });
 app.use("/api", publicRoutes);
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auth", authRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
