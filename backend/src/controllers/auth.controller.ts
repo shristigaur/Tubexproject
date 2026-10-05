@@ -10,7 +10,10 @@ import {
   getRefreshTokenExpiry,
   hashPassword,
   hashToken,
+  createOtpToken,
+  verifyOtpToken,
 } from "../lib/auth.js";
+import { generateAndSendOtp } from "../services/otp.service.js";
 
 // ==========================================
 // GOOGLE CLIENT
@@ -173,14 +176,24 @@ export async function login(req: Request, res: Response) {
 
 
 
-    const accessToken = createAccessToken(user.id);
-    const refreshToken = await createSession(user.id, req);
+    // Set pending OTP state
+    const otpToken = createOtpToken(user.id);
+    const isProduction = process.env.NODE_ENV === "production";
+    
+    res.cookie("otp_token", otpToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 15 * 60 * 1000, // 15 mins
+      path: "/api/auth",
+    });
 
-    setAuthCookies(res, accessToken, refreshToken);
+    await generateAndSendOtp({ id: user.id, email: user.email });
 
     return res.status(200).json({
-      message: "Login successful!",
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      requiresOtp: true,
+      message: "Please verify your email",
+      email: user.email,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -251,14 +264,24 @@ export async function googleAuth(req: Request, res: Response) {
 
 
 
-    const accessToken = createAccessToken(user.id);
-    const refreshToken = await createSession(user.id, req);
+    // Set pending OTP state
+    const otpToken = createOtpToken(user.id);
+    const isProduction = process.env.NODE_ENV === "production";
+    
+    res.cookie("otp_token", otpToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 15 * 60 * 1000, // 15 mins
+      path: "/api/auth",
+    });
 
-    setAuthCookies(res, accessToken, refreshToken);
+    await generateAndSendOtp({ id: user.id, email: user.email });
 
     return res.status(200).json({
-      message: "Google authentication successful!",
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      requiresOtp: true,
+      message: "Please verify your email",
+      email: user.email,
     });
   } catch (error: any) {
     console.error("Google auth error:", error);
@@ -333,5 +356,152 @@ export async function getMe(req: Request, res: Response) {
   } catch (error) {
     console.error("Get me error:", error);
     return res.status(500).json({ message: "Failed to load user profile." });
+  }
+}
+
+// ==========================================
+// SEND OTP
+// ==========================================
+
+export async function sendOtp(req: Request, res: Response) {
+  try {
+    const token = req.cookies.otp_token;
+    if (!token) return res.status(401).json({ message: "Session expired" });
+
+    let userId: string;
+    try {
+      const payload = verifyOtpToken(token);
+      userId = payload.sub;
+    } catch {
+      return res.status(401).json({ message: "Session expired" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Rate limiting: prevent spamming
+    const lastToken = await prisma.verificationToken.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (lastToken) {
+      const timeSinceLastOtp = Date.now() - lastToken.createdAt.getTime();
+      const cooldownMs = 60 * 1000; // 1 minute cooldown
+      if (timeSinceLastOtp < cooldownMs) {
+        return res.status(429).json({ 
+          message: "Please wait before requesting another code." 
+        });
+      }
+    }
+
+    await generateAndSendOtp({ id: user.id, email: user.email });
+
+    return res.status(200).json({
+      success: true,
+      message: "Verification code sent to your email",
+    });
+  } catch (error) {
+    // Note: Do not log the OTP or sensitive data here, only the generic error
+    console.error("Send OTP error:", error);
+    return res.status(500).json({ message: "Failed to send verification code." });
+  }
+}
+
+// ==========================================
+// VERIFY OTP
+// ==========================================
+
+export async function verifyOtp(req: Request, res: Response) {
+  try {
+    const token = req.cookies.otp_token;
+    if (!token) return res.status(401).json({ message: "Session expired" });
+
+    let userId: string;
+    try {
+      const payload = verifyOtpToken(token);
+      userId = payload.sub;
+    } catch {
+      return res.status(401).json({ message: "Session expired" });
+    }
+
+    const { otp } = req.body;
+    if (!otp) {
+      return res.status(400).json({ message: "OTP is required." });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const tokenRecord = await prisma.verificationToken.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!tokenRecord) {
+      return res.status(400).json({ message: "No verification code found. Please request a new one." });
+    }
+
+    if (tokenRecord.verified) {
+      return res.status(400).json({ message: "This code has already been used." });
+    }
+
+    if (tokenRecord.attempts >= 5) {
+      return res.status(400).json({ message: "Too many failed attempts. Please request a new code." });
+    }
+
+    if (tokenRecord.expiresAt < new Date()) {
+      return res.status(400).json({ message: "Verification code has expired." });
+    }
+
+    const isValid = await comparePassword(otp.toString(), tokenRecord.codeHash);
+
+    if (!isValid) {
+      await prisma.verificationToken.update({
+        where: { id: tokenRecord.id },
+        data: { attempts: { increment: 1 } },
+      });
+      return res.status(400).json({ message: "Invalid verification code." });
+    }
+
+    // Success! Mark as verified
+    await prisma.verificationToken.update({
+      where: { id: tokenRecord.id },
+      data: { verified: true },
+    });
+
+    // Fully verify the user
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true },
+    });
+
+    // Clear otp_token
+    res.clearCookie("otp_token", { path: "/api/auth" });
+
+    // Grant full session
+    const accessToken = createAccessToken(user.id);
+    const refreshToken = await createSession(user.id, req);
+    setAuthCookies(res, accessToken, refreshToken);
+
+    return res.status(200).json({
+      success: true,
+      message: "Verification successful!",
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
+    });
+  } catch (error) {
+    console.error("Verify OTP error:", error);
+    return res.status(500).json({ message: "Failed to verify code." });
   }
 }

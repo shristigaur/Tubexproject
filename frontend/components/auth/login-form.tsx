@@ -57,6 +57,14 @@ export function LoginForm() {
         }),
       });
 
+      if (data.requiresOtp) {
+        setSuccess(data.message || "Please verify your email.");
+        setTimeout(() => {
+          router.push(`/verify-otp?email=${encodeURIComponent(data.email)}`);
+        }, 700);
+        return;
+      }
+
       setSuccess(data.message || "Login successful!");
 
       setTimeout(() => {

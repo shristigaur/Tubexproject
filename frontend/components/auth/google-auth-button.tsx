@@ -19,6 +19,12 @@ export function GoogleAuthButton() {
         method: "POST",
         body: JSON.stringify({ credential: response.credential }),
       });
+
+      if (data.requiresOtp) {
+        router.push(`/verify-otp?email=${encodeURIComponent(data.email)}`);
+        return;
+      }
+
       router.push(data.user?.role === "SELLER" ? "/seller-dashboard" : "/explore-channels");
     } catch (err: any) {
 

@@ -49,10 +49,31 @@ export function getRefreshTokenExpiry() {
 }
 
 export function verifyAccessToken(token: string) {
-  return jwt.verify(
+  const payload = jwt.verify(
     token,
     process.env.JWT_ACCESS_SECRET!
   ) as {
     sub: string;
+    type?: string;
   };
+  
+  if (payload.type === "OTP") {
+    throw new Error("Invalid access token");
+  }
+  
+  return payload;
+}
+
+export function createOtpToken(userId: string) {
+  return jwt.sign(
+    { sub: userId, type: "OTP" },
+    process.env.JWT_ACCESS_SECRET!,
+    { expiresIn: "15m" }
+  );
+}
+
+export function verifyOtpToken(token: string) {
+  const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as { sub: string, type: string };
+  if (payload.type !== "OTP") throw new Error("Invalid token type");
+  return payload;
 }
