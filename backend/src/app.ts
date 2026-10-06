@@ -13,7 +13,10 @@ import { notFound, errorHandler } from "./middleware/error.js";
 export const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
-app.use(helmet());
+app.use(helmet({
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+  crossOriginEmbedderPolicy: false,
+}));
 const clientOrigin = env.CLIENT_URL || env.FRONTEND_URL || "";
 const allowedOrigins = env.NODE_ENV === "production" 
   ? [clientOrigin] 

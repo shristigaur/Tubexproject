@@ -268,17 +268,22 @@ export async function googleAuth(req: Request, res: Response) {
 
 
 
-    // Set pending OTP state
-    const otpToken = createOtpToken(user.id);
-    const isProduction = process.env.NODE_ENV === "production";
-    
-    res.cookie("otp_token", otpToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      maxAge: 15 * 60 * 1000, // 15 mins
-      path: "/api/auth",
-    });
+    if (user.emailVerified) {
+      const accessToken = createAccessToken(user.id);
+      const refreshToken = await createSession(user.id, req);
+      setAuthCookies(res, accessToken, refreshToken);
+
+      return res.status(200).json({
+        success: true,
+        message: "Logged in successfully.",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      });
+    }
 
     await generateAndSendOtp({ id: user.id, email: user.email });
 
