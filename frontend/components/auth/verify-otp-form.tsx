@@ -29,7 +29,7 @@ export function VerifyOtpForm() {
 
   useEffect(() => {
     if (!email) {
-      router.push("/login");
+      router.push("/signup");
     }
   }, [email, router]);
 

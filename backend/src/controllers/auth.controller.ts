@@ -133,9 +133,11 @@ export async function signup(req: Request, res: Response) {
       },
     });
 
+    await generateAndSendOtp({ id: user.id, email: user.email });
+
     return res.status(201).json({
       success: true,
-      message: "User created successfully.",
+      message: "User created successfully. Please verify your email.",
       email: user.email,
     });
   } catch (error: any) {
@@ -367,19 +369,11 @@ export async function getMe(req: Request, res: Response) {
 
 export async function sendOtp(req: Request, res: Response) {
   try {
-    const token = req.cookies.otp_token;
-    if (!token) return res.status(401).json({ message: "Session expired" });
-
-    let userId: string;
-    try {
-      const payload = verifyOtpToken(token);
-      userId = payload.sub;
-    } catch {
-      return res.status(401).json({ message: "Session expired" });
-    }
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required." });
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email.trim().toLowerCase() },
       select: { id: true, email: true },
     });
 
@@ -422,24 +416,13 @@ export async function sendOtp(req: Request, res: Response) {
 
 export async function verifyOtp(req: Request, res: Response) {
   try {
-    const token = req.cookies.otp_token;
-    if (!token) return res.status(401).json({ message: "Session expired" });
-
-    let userId: string;
-    try {
-      const payload = verifyOtpToken(token);
-      userId = payload.sub;
-    } catch {
-      return res.status(401).json({ message: "Session expired" });
-    }
-
-    const { otp } = req.body;
-    if (!otp) {
-      return res.status(400).json({ message: "OTP is required." });
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP are required." });
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email.trim().toLowerCase() },
     });
 
     if (!user) {
@@ -451,20 +434,12 @@ export async function verifyOtp(req: Request, res: Response) {
       orderBy: { createdAt: "desc" },
     });
 
-    if (!tokenRecord) {
-      return res.status(400).json({ message: "No verification code found. Please request a new one." });
-    }
-
-    if (tokenRecord.verified) {
-      return res.status(400).json({ message: "This code has already been used." });
+    if (!tokenRecord || tokenRecord.verified || tokenRecord.expiresAt < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired code" });
     }
 
     if (tokenRecord.attempts >= 5) {
       return res.status(400).json({ message: "Too many failed attempts. Please request a new code." });
-    }
-
-    if (tokenRecord.expiresAt < new Date()) {
-      return res.status(400).json({ message: "Verification code has expired." });
     }
 
     const isValid = await comparePassword(otp.toString(), tokenRecord.codeHash);
@@ -474,7 +449,7 @@ export async function verifyOtp(req: Request, res: Response) {
         where: { id: tokenRecord.id },
         data: { attempts: { increment: 1 } },
       });
-      return res.status(400).json({ message: "Invalid verification code." });
+      return res.status(400).json({ message: "Invalid or expired code" });
     }
 
     // Success! Mark as verified
@@ -490,7 +465,12 @@ export async function verifyOtp(req: Request, res: Response) {
     });
 
     // Clear otp_token
-    res.clearCookie("otp_token", { path: "/api/auth" });
+    res.clearCookie("otp_token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      path: "/api/auth"
+    });
 
     // Grant full session
     const accessToken = createAccessToken(user.id);

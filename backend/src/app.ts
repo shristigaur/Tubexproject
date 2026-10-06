@@ -14,7 +14,16 @@ export const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(helmet());
-app.use(cors({ origin: env.FRONTEND_URL, credentials: true }));
+const clientOrigin = env.CLIENT_URL || env.FRONTEND_URL || "";
+const allowedOrigins = env.NODE_ENV === "production" 
+  ? [clientOrigin] 
+  : [clientOrigin, "http://localhost:3000"].filter(Boolean);
+
+app.use(cors({ 
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+}));
 app.use(express.json({ limit: "20kb" }));
 app.use(express.urlencoded({ extended: false, limit: "20kb" }));
 app.use(cookieParser());

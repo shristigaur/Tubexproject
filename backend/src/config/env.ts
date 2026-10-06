@@ -4,7 +4,8 @@ import { z } from "zod";
 const schema = z.object({
  NODE_ENV:z.enum(["development","test","production"]).default("development"),
  PORT:z.coerce.number().int().positive().default(5000),
- FRONTEND_URL:z.string().url(),
+ FRONTEND_URL:z.string().url().optional(),
+ CLIENT_URL:z.string().url().optional(),
  DATABASE_URL:z.string().min(1),
  SMTP_HOST:z.string().min(1),
  SMTP_PORT:z.coerce.number().int().positive(),

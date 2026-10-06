@@ -94,10 +94,10 @@ export function SignupForm() {
         }),
       });
 
-      setSuccess("Account created! You can now login.");
+      setSuccess("Account created! Please verify your email.");
 
       setTimeout(() => {
-        router.push("/login");
+        router.push(`/verify-otp?email=${encodeURIComponent(email.trim().toLowerCase())}`);
       }, 1000);
     } catch (error) {
       if (error instanceof Error) {
