@@ -40,6 +40,12 @@ model User {
 
   role            Role      @default(USER)
 
+  resetOtpHash        String?
+  resetOtpExpires     DateTime?
+  resetOtpAttempts    Int       @default(0)
+  resetOtpVerified    Boolean   @default(false)
+  resetOtpLastSentAt  DateTime?
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

@@ -507,3 +507,178 @@ export async function verifyOtp(req: Request, res: Response) {
     return res.status(500).json({ message: "Failed to verify code." });
   }
 }
+
+// ==========================================
+// FORGOT PASSWORD
+// ==========================================
+
+export async function forgotPassword(req: Request, res: Response) {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required." });
+    }
+
+    const emailLower = email.trim().toLowerCase();
+    
+    // Fire and forget background execution to prevent timing attacks
+    const successMessage = "If this email is registered, an OTP has been sent";
+    res.status(200).json({ success: true, message: successMessage });
+
+    setImmediate(async () => {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { email: emailLower }
+        });
+
+        if (!user) return;
+
+        const now = new Date();
+        if (user.resetOtpLastSentAt) {
+          const timeSinceLastSent = now.getTime() - user.resetOtpLastSentAt.getTime();
+          if (timeSinceLastSent < 60000) {
+            return;
+          }
+        }
+
+        const { randomInt } = await import("crypto");
+        const otp = randomInt(100000, 1000000).toString();
+        const otpHash = await hashPassword(otp);
+        
+        const expires = new Date(now.getTime() + 10 * 60000); // 10 minutes
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            resetOtpHash: otpHash,
+            resetOtpExpires: expires,
+            resetOtpAttempts: 0,
+            resetOtpVerified: false,
+            resetOtpLastSentAt: now,
+          }
+        });
+
+        const { sendEmail } = await import("../services/mail.service.js");
+        const htmlBody = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>TubeX Password Reset</h2>
+            <p>You requested a password reset. Here is your 6-digit OTP code:</p>
+            <div style="background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
+              ${otp}
+            </div>
+            <p>This code expires in 10 minutes.</p>
+            <p style="color: #666; font-size: 12px; margin-top: 30px;">
+              If you did not request this email, please ignore it.
+            </p>
+          </div>
+        `;
+        await sendEmail({
+          to: emailLower,
+          subject: "TubeX password reset code",
+          html: htmlBody,
+        });
+      } catch (err) {
+        console.error("Background OTP processing error:", err);
+      }
+    });
+
+  } catch (error) {
+    if (!res.headersSent) {
+      return res.status(500).json({ message: "Something went wrong." });
+    }
+  }
+}
+
+// ==========================================
+// VERIFY RESET OTP
+// ==========================================
+
+export async function verifyResetOtp(req: Request, res: Response) {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP are required." });
+    }
+
+    const emailLower = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: emailLower },
+    });
+
+    if (!user || !user.resetOtpHash || !user.resetOtpExpires || user.resetOtpExpires < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    if (user.resetOtpAttempts >= 5) {
+      return res.status(429).json({ message: "Too many attempts, request a new OTP" });
+    }
+
+    const isValid = await comparePassword(otp.toString(), user.resetOtpHash);
+
+    if (!isValid) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetOtpAttempts: { increment: 1 } }
+      });
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetOtpVerified: true }
+    });
+
+    return res.status(200).json({ success: true, message: "OTP verified successfully." });
+  } catch (error) {
+    return res.status(500).json({ message: "Something went wrong." });
+  }
+}
+
+// ==========================================
+// RESET PASSWORD
+// ==========================================
+
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: "Email, OTP and new password are required." });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters." });
+    }
+
+    const emailLower = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: emailLower },
+    });
+
+    if (!user || !user.resetOtpVerified || !user.resetOtpHash || !user.resetOtpExpires || user.resetOtpExpires < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired reset session." });
+    }
+
+    const isValid = await comparePassword(otp.toString(), user.resetOtpHash);
+    if (!isValid) {
+      return res.status(400).json({ message: "Invalid or expired reset session." });
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: newPasswordHash,
+        resetOtpHash: null,
+        resetOtpExpires: null,
+        resetOtpAttempts: 0,
+        resetOtpVerified: false,
+        resetOtpLastSentAt: null,
+      }
+    });
+
+    return res.status(200).json({ success: true, message: "Password updated successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: "Something went wrong." });
+  }
+}
