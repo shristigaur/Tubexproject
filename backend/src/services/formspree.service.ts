@@ -36,17 +36,19 @@ If you did not request this code, you can safely ignore this email.
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json"
       },
       body: JSON.stringify({
         email: toEmail,
         message: textBody,
         subject: `TubeX ${title}`,
-        _replyto: "noreply@tubex.com"
+        _replyto: toEmail
       }),
     });
 
     if (!response.ok) {
-      console.error(`Formspree OTP submission failed: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`Formspree OTP submission failed: ${response.status} ${response.statusText} - ${errorText}`);
       return { success: false, error: "Failed to send email via Formspree." };
     }
 
