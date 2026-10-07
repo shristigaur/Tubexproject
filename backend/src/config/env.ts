@@ -7,11 +7,7 @@ const schema = z.object({
  FRONTEND_URL:z.string().url().optional(),
  CLIENT_URL:z.string().url().optional(),
  DATABASE_URL:z.string().min(1),
- SMTP_HOST:z.string().min(1),
- SMTP_PORT:z.coerce.number().int().positive(),
- SMTP_USER:z.string().min(1),
- SMTP_PASS:z.string().min(1),
- SMTP_FROM:z.string().min(1),
+ FORMSPREE_FORM_ID:z.string().min(1).optional(),
  TEST_EMAIL_TO:z.string().email().optional(),
 }).refine(data => {
   return true;

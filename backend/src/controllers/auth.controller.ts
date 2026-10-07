@@ -183,7 +183,7 @@ export async function login(req: Request, res: Response) {
     // Set pending OTP state
     const otpToken = createOtpToken(user.id);
     const isProduction = process.env.NODE_ENV === "production";
-    
+
     res.cookie("otp_token", otpToken, {
       httpOnly: true,
       secure: isProduction,
@@ -262,28 +262,22 @@ export async function googleAuth(req: Request, res: Response) {
           }
         });
       } else if (user.googleId !== payload.sub) {
-         return res.status(401).json({ message: "Google authentication failed. Please use your original login method." });
+        return res.status(401).json({ message: "Google authentication failed. Please use your original login method." });
       }
     }
 
 
 
-    if (user.emailVerified) {
-      const accessToken = createAccessToken(user.id);
-      const refreshToken = await createSession(user.id, req);
-      setAuthCookies(res, accessToken, refreshToken);
+    const otpToken = createOtpToken(user.id);
+    const isProduction = process.env.NODE_ENV === "production";
 
-      return res.status(200).json({
-        success: true,
-        message: "Logged in successfully.",
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        },
-      });
-    }
+    res.cookie("otp_token", otpToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 15 * 60 * 1000, // 15 mins
+      path: "/api/auth",
+    });
 
     await generateAndSendOtp({ id: user.id, email: user.email });
 
@@ -396,8 +390,8 @@ export async function sendOtp(req: Request, res: Response) {
       const timeSinceLastOtp = Date.now() - lastToken.createdAt.getTime();
       const cooldownMs = 60 * 1000; // 1 minute cooldown
       if (timeSinceLastOtp < cooldownMs) {
-        return res.status(429).json({ 
-          message: "Please wait before requesting another code." 
+        return res.status(429).json({
+          message: "Please wait before requesting another code."
         });
       }
     }
@@ -505,7 +499,7 @@ export async function forgotPassword(req: Request, res: Response) {
     }
 
     const emailLower = email.trim().toLowerCase();
-    
+
     // Fire and forget background execution to prevent timing attacks
     const successMessage = "If this email is registered, an OTP has been sent";
     res.status(200).json({ success: true, message: successMessage });
@@ -529,7 +523,7 @@ export async function forgotPassword(req: Request, res: Response) {
         const { randomInt } = await import("crypto");
         const otp = randomInt(100000, 1000000).toString();
         const otpHash = await hashPassword(otp);
-        
+
         const expires = new Date(now.getTime() + 10 * 60000); // 10 minutes
 
         await prisma.user.update({
@@ -543,25 +537,16 @@ export async function forgotPassword(req: Request, res: Response) {
           }
         });
 
-        const { sendEmail } = await import("../services/mail.service.js");
-        const htmlBody = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>TubeX Password Reset</h2>
-            <p>You requested a password reset. Here is your 6-digit OTP code:</p>
-            <div style="background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
-              ${otp}
-            </div>
-            <p>This code expires in 10 minutes.</p>
-            <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              If you did not request this email, please ignore it.
-            </p>
-          </div>
-        `;
-        await sendEmail({
-          to: emailLower,
-          subject: "TubeX password reset code",
-          html: htmlBody,
+        const { sendFormspreeOtpEmail } = await import("../services/formspree.service.js");
+        const emailResult = await sendFormspreeOtpEmail({
+          toEmail: emailLower,
+          otp,
+          purpose: "password_reset",
         });
+        
+        if (!emailResult.success) {
+           console.error("Failed to send password reset email via Formspree.");
+        }
       } catch (err) {
         console.error("Background OTP processing error:", err);
       }

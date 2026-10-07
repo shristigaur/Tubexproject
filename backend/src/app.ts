@@ -46,20 +46,7 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-if (env.NODE_ENV === "development") {
-  app.get("/dev/test-email", async (_req, res) => {
-    if (!env.TEST_EMAIL_TO) {
-      return res.status(400).json({ success: false, message: "TEST_EMAIL_TO is not configured" });
-    }
-    const { sendEmail } = await import("./services/mail.service.js");
-    const result = await sendEmail({
-      to: env.TEST_EMAIL_TO,
-      subject: "TubeX SMTP Test",
-      text: "This is a test email from the TubeX backend.",
-    });
-    return res.status(result.success ? 200 : 500).json(result);
-  });
-}
+
 app.use("/api", publicRoutes);
 app.use("/api/auth", authRoutes);
 app.use(notFound);

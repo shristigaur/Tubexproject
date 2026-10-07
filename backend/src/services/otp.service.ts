@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { hashPassword } from "../lib/auth.js";
-import { sendEmail } from "./mail.service.js";
+import { sendFormspreeOtpEmail } from "./formspree.service.js";
 
 const OTP_EXPIRATION_MINUTES = 10;
 
@@ -30,26 +30,15 @@ export async function generateAndSendOtp(user: { id: string; email: string }) {
     },
   });
 
-  // Send the plaintext OTP via email only
-  const subject = "Your TubeX verification code";
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>TubeX Verification</h2>
-      <p>This is a TubeX verification code. Please use it to securely access your account.</p>
-      <div style="background-color: #f4f4f4; padding: 16px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 4px; margin: 20px 0;">
-        ${otp}
-      </div>
-      <p>This code will expire in <strong>${OTP_EXPIRATION_MINUTES} minutes</strong>.</p>
-      <p style="color: #d93025; font-weight: bold;">Do not share this code with anyone.</p>
-      <p>If you did not request this, please ignore this email.</p>
-    </div>
-  `;
-
-  await sendEmail({
-    to: user.email,
-    subject,
-    html,
+  const emailResult = await sendFormspreeOtpEmail({
+    toEmail: user.email,
+    otp,
+    purpose: "verification",
   });
+
+  if (!emailResult.success) {
+    throw new Error("Failed to send verification code. Please try again later.");
+  }
 
   // Never return the OTP to the caller or API
   return { success: true };
